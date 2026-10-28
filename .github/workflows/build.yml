@@ -1,0 +1,44 @@
+name: build-kernel
+on: workflow_dispatch
+env:
+  MAKE_ARGS: >-
+    O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm
+    OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+    CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-
+    CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packages
+        run: sudo apt-get update && sudo apt-get install -y bc bison flex libssl-dev libelf-dev cpio binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+      - name: Get kernel source (exact commit)
+        run: |
+          git init kernel && cd kernel
+          git config core.abbrev 12
+          git remote add origin https://github.com/PixelOS-Devices/android_kernel_xiaomi_sm8250
+          git fetch --depth=1 origin 2fbe35cee4e6dffb4f64dc4a08a7a70255fe333e
+          git checkout FETCH_HEAD
+      - name: Get AOSP clang r596125
+        run: |
+          mkdir clang
+          curl -sL https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r596125.tar.gz | tar -xz -C clang
+          echo "$PWD/clang/bin" >> $GITHUB_PATH
+      - name: Configure
+        working-directory: kernel
+        run: |
+          mkdir out && cp ../config out/.config
+          OPTS="SYSVIPC POSIX_MQUEUE IPC_NS PID_NS CGROUP_DEVICE CGROUP_PIDS BRIDGE_NETFILTER NETFILTER_XT_MATCH_ADDRTYPE"
+          for c in $OPTS; do scripts/config --file out/.config -e $c; done
+          make $MAKE_ARGS olddefconfig
+          for c in $OPTS; do grep -q "^CONFIG_$c=y" out/.config || { echo "FAIL: $c"; exit 1; }; done
+      - name: Build
+        working-directory: kernel
+        run: |
+          make $MAKE_ARGS -j$(nproc) Image
+          echo "Release: $(cat out/include/config/kernel.release)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Image
+          path: kernel/out/arch/arm64/boot/Image

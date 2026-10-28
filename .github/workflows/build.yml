@@ -23,8 +23,9 @@ jobs:
       - name: Get AOSP clang r596125
         run: |
           mkdir clang
-          curl -sL https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r596125.tar.gz | tar -xz -C clang
+          curl -fsSL https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/mirror-goog-main-llvm-toolchain-source/clang-r596125.tar.gz | tar -xz -C clang
           echo "$PWD/clang/bin" >> $GITHUB_PATH
+          clang/bin/clang --version
       - name: Configure
         working-directory: kernel
         run: |
